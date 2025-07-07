@@ -1,0 +1,10 @@
+pandas
+numpy 
+fastapi 
+uvicorn 
+requests 
+langchain 
+openai
+psycopg2-binary
+mysql-connector-python 
+sqlalchemy
