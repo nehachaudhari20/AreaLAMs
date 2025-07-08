@@ -4,6 +4,7 @@ import json
 
 from sqlalchemy import Table, MetaData
 from sqlalchemy.dialects.mysql import insert as mysql_insert
+from vectordb.add_to_db import add_failure_summary
 
 class FailureDetectionAgent:
     def __init__(self):
@@ -17,7 +18,6 @@ class FailureDetectionAgent:
         WHERE status='fail' AND latency_ms IS NOT NULL
         """
         df = pd.read_sql(query, self.engine)
-        # Fill NaN error_rate with 0 for safe calculation
         df['error_rate'] = df['error_rate'].fillna(0)
         return df
 
@@ -54,7 +54,6 @@ class FailureDetectionAgent:
         return all_anomalies
 
     def format_output(self, anomalies):
-        # If needed, can customize or just return as is
         return anomalies
 
     def run(self):
@@ -71,7 +70,7 @@ class FailureDetectionAgent:
         formatted = self.format_output(anomalies)
         print(json.dumps(formatted, indent=2))
         return formatted
-    
+
     def save_anomalies(self, anomalies):
         metadata = MetaData()
         metadata.reflect(bind=self.engine)
@@ -93,7 +92,12 @@ class FailureDetectionAgent:
                 )
                 conn.execute(stmt)
             conn.commit()
-        print(f"✅ {len(anomalies)} anomalies saved to MySQL.")
+        print(f"{len(anomalies)} anomalies saved to MySQL.")
+
+        # Also store fingerprint to Chroma
+        for anomaly in anomalies:
+            summary = f"{anomaly['service']} {anomaly['metric']} anomaly: {anomaly['value']} at {anomaly['timestamp']}"
+            add_failure_summary(summary, anomaly['txn_id'], anomaly['service'], f"{anomaly['metric']}_spike")
 
 if __name__ == "__main__":
     agent = FailureDetectionAgent()
