@@ -320,16 +320,7 @@ def create_sla_table_if_not_exists():
             connection.close()
 
 
-def calculate_confidence(success_rate, similarity, severity, sla_urgency, w1=0.3, w2=0.4, w3=0.2, w4=0.1):
-    """
-    Calculate the confidence score using the provided formula and weights.
-    """
-    return (
-        success_rate * w1 +
-        similarity * w2 +
-        severity * w3 +
-        sla_urgency * w4
-    )
+# (No confidence score logic present in this file. All confidence-related code has been removed.)
 
 
 def save_sla_analysis_to_db():
@@ -368,7 +359,7 @@ def save_sla_analysis_to_db():
             similarity = 0.95
             severity_factor = 0.8
             sla_urgency = 0.7
-            confidence = calculate_confidence(success_rate, similarity, severity_factor, sla_urgency)
+            confidence = 0 # Placeholder, no confidence score calculation
             # Insert into sla_table
             insert_query = '''
                 INSERT INTO sla_table (
