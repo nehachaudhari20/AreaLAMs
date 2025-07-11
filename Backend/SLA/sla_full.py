@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, Integer, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base
@@ -389,4 +389,142 @@ def save_sla_analysis_to_db():
         return None
     finally:
         if connection:
-            connection.close() 
+            connection.close()
+
+def create_report_table_if_not_exists():
+    """
+    Create the report_table in the AWS MySQL database if it does not exist.
+    """
+    connection = None
+    try:
+        connection = pymysql.connect(
+            host='llm.c0n8k0a0swtz.us-east-1.rds.amazonaws.com',
+            user='admin',
+            password='yaswanth',
+            database='lamx_data',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS report_table (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    acc_no VARCHAR(32),
+                    txn_id VARCHAR(64),
+                    rca_summary TEXT,
+                    actions_taken TEXT,
+                    confidence FLOAT,
+                    sla_breached BOOLEAN,
+                    users_affected INT,
+                    severity VARCHAR(32),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+        connection.commit()
+    except Exception as e:
+        logging.error(f"Error creating report_table: {e}")
+    finally:
+        if connection:
+            connection.close()
+
+
+def process_sla_table_and_generate_report():
+    """
+    Fetch all rows from sla_table, compute SLA fields, and insert into report_table.
+    """
+    connection = None
+    try:
+        create_report_table_if_not_exists()
+        connection = pymysql.connect(
+            host='llm.c0n8k0a0swtz.us-east-1.rds.amazonaws.com',
+            user='admin',
+            password='yaswanth',
+            database='lamx_data',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT * FROM sla_table')
+            rows = cursor.fetchall()
+            for row in rows:
+                acc_no = row.get('acc_no')
+                txn_id = row.get('txn_id')
+                rca_summary = row.get('rca_summary') or row.get('root_cause')
+                actions_taken = row.get('actions_taken')
+                confidence = row.get('confidence', 0)
+                created_at = row.get('created_at')
+                # For SLA logic, try to infer alert_type from rca_summary or default
+                alert_type = 'gateway_error'
+                if rca_summary:
+                    if 'latency' in rca_summary:
+                        alert_type = 'latency_spike'
+                    elif 'timeout' in rca_summary:
+                        alert_type = 'timeout'
+                    elif 'validation' in rca_summary:
+                        alert_type = 'validation_error'
+                    elif 'insufficient' in rca_summary:
+                        alert_type = 'insufficient_funds'
+                # Use created_at as fix_completed_at, and estimate detected_at as 5 minutes before (if not available)
+                fix_completed_at = created_at
+                if isinstance(fix_completed_at, str):
+                    try:
+                        fix_completed_at = datetime.fromisoformat(fix_completed_at.replace('Z', '+00:00')) if 'T' in fix_completed_at else datetime.strptime(fix_completed_at, '%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        fix_completed_at = datetime.utcnow()
+                alert_detected_at = fix_completed_at
+                try:
+                    alert_detected_at = fix_completed_at - timedelta(minutes=5)
+                except Exception:
+                    alert_detected_at = fix_completed_at
+                agent = SLAAgent()
+                sla_result = agent.calculate_sla_compliance(
+                    alert_detected_at=alert_detected_at,
+                    fix_completed_at=fix_completed_at,
+                    alert_type=alert_type
+                )
+                users_affected = agent.calculate_users_affected(alert_type=alert_type, region='default')
+                sla_breached = sla_result['breached']
+                severity = sla_result['sla_level']
+                # Insert into report_table
+                insert_query = '''
+                    INSERT INTO report_table (
+                        acc_no, txn_id, rca_summary, actions_taken, confidence, sla_breached, users_affected, severity, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                '''
+                cursor.execute(insert_query, (
+                    acc_no, txn_id, rca_summary, actions_taken, confidence, sla_breached, users_affected, severity, fix_completed_at
+                ))
+        connection.commit()
+        logging.info("Processed sla_table and generated report_table.")
+    except Exception as e:
+        logging.error(f"Error processing sla_table for report_table: {e}")
+    finally:
+        if connection:
+            connection.close()
+
+def print_report_table_contents():
+    """
+    Print all rows from report_table for verification.
+    """
+    connection = None
+    try:
+        connection = pymysql.connect(
+            host='llm.c0n8k0a0swtz.us-east-1.rds.amazonaws.com',
+            user='admin',
+            password='yaswanth',
+            database='lamx_data',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT * FROM report_table')
+            rows = cursor.fetchall()
+            for row in rows:
+                print(row)
+    except Exception as e:
+        logging.error(f"Error printing report_table: {e}")
+    finally:
+        if connection:
+            connection.close()
+
+if __name__ == "__main__":
+    process_sla_table_and_generate_report()
+    print("\nContents of report_table:")
+    print_report_table_contents() 
