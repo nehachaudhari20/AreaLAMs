@@ -4,11 +4,18 @@ from fastapi.responses import JSONResponse
 import os
 import json
 from datetime import datetime
- 
-from RCA.failure_detection import FailureDetectionAgent
-from RCA.pattern import PatternDetectorAgent
-from RCA.rca_reasoning import RCAReasoningAgent
- 
+import sys
+
+# Add error handling for imports
+try:
+    from RCA.failure_detection import FailureDetectionAgent
+    from RCA.pattern import PatternDetectorAgent
+    from RCA.rca_reasoning import RCAReasoningAgent
+    print("✅ All agents imported successfully")
+except Exception as e:
+    print(f"❌ Import error: {e}")
+    sys.exit(1)
+
 app = FastAPI(title="RCA Unified Processor")
  
 UPLOAD_DIR = "uploaded_data"

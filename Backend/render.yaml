@@ -13,4 +13,6 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: MODEL_ID
-        value: llama3-8b-8192 
+        value: llama3-8b-8192
+      - key: PORT
+        value: 8000 
