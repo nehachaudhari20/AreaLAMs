@@ -10,5 +10,5 @@ mkdir -p vector_db/vector_store
 # Install dependencies
 pip install -r requirements.txt
 
-# Start the application
-uvicorn main:app --host 0.0.0.0 --port $PORT 
+# Start the application with proper error handling
+exec uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 

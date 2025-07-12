@@ -21,13 +21,17 @@ except Exception as e:
     sys.exit(1)
 
 app = FastAPI(title="RCA Unified Processor")
- 
+
+# Create necessary directories
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Create necessary directories for agents
 VECTOR_DIR = "vector_db/vector_store"
 os.makedirs(VECTOR_DIR, exist_ok=True)
+
+print("✅ Directories created successfully")
+print(f"✅ Upload directory: {os.path.abspath(UPLOAD_DIR)}")
+print(f"✅ Vector directory: {os.path.abspath(VECTOR_DIR)}")
  
 @app.get("/")
 def health_check():
