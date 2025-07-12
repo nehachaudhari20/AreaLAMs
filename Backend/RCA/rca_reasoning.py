@@ -42,15 +42,26 @@ class RCAReasoningAgent:
 
     def fetch_anomalies_for_rca(self):
         """
-        Fetch ALL anomalies that need RCA processing (have null rca_confidence).
-        This will process all null values in the most efficient way.
+        Fetch ALL anomalies to update their rca_summary to network-related issues only.
         """
+        # First, let's check what anomalies exist
+        check_query = """
+            SELECT COUNT(*) as total_anomalies,
+                   COUNT(CASE WHEN rca_summary IS NOT NULL THEN 1 END) as with_rca_summary,
+                   COUNT(CASE WHEN rca_summary IS NULL THEN 1 END) as null_rca_summary
+            FROM anomaly_logs
+        """
+        check_result = pd.read_sql(check_query, self.engine)
+        print(f"Database status: {check_result.to_dict('records')}")
+        
+        # Get all anomalies to update their rca_summary
         query = """
             SELECT * FROM anomaly_logs
-            WHERE rca_confidence IS NULL
             ORDER BY timestamp DESC
         """
-        return pd.read_sql(query, self.engine)
+        result = pd.read_sql(query, self.engine)
+        print(f"Found {len(result)} total anomalies to update with network-focused RCA")
+        return result
 
     def query_similar_patterns(self, description):
         emb = embedding_model.encode(description).tolist()
@@ -70,7 +81,7 @@ class RCAReasoningAgent:
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert in root cause analysis of service outages and transaction failures."
+                "content": "You are an expert in root cause analysis focusing specifically on network-related issues. Analyze the given anomaly and provide a concise RCA summary that identifies network-related root causes and solutions."
             },
             {
                 "role": "user",
@@ -84,8 +95,17 @@ Timestamp: {anomaly['timestamp']}
 And similar past patterns:
 {chr(10).join(similar_patterns)}
 
-What is the likely root cause and a possible fix?
-Provide a brief, clear reasoning summary.
+Analyze this anomaly specifically for network-related issues. Consider:
+- Network connectivity problems
+- DNS resolution issues
+- Network latency spikes
+- Network bandwidth constraints
+- Network configuration issues
+- Load balancer problems
+- CDN issues
+- Network security issues
+
+Provide a brief, clear reasoning summary focusing only on network-related root causes and solutions.
 """
             }
         ]
@@ -134,6 +154,7 @@ Provide a brief, clear reasoning summary.
     def get_severity(self, anomaly):
         """
         Dynamically calculate severity by normalizing the value field based on metric-specific min/max.
+        Focus on network-related metrics for network issue analysis.
         Returns a value in [0, 1].
         """
         metric = anomaly.get('metric', '').lower()
@@ -141,10 +162,13 @@ Provide a brief, clear reasoning summary.
             value = float(anomaly.get('value', 0))
         except Exception:
             value = 0.0
-        # Define min/max for common metrics (expand as needed)
+        # Define min/max for network-related metrics
         metric_ranges = {
             'latency_ms': (0, 5000),   # 0ms (best) to 5000ms (worst)
             'error_rate': (0, 1),      # 0% to 100%
+            'network_latency': (0, 3000),  # Network-specific latency
+            'dns_resolution_time': (0, 1000),  # DNS resolution time
+            'connection_timeout': (0, 1),  # Connection timeout rate
         }
         min_val, max_val = metric_ranges.get(metric, (0, 1))
         if max_val == min_val:
@@ -231,13 +255,40 @@ Provide a brief, clear reasoning summary.
     def run(self):
         anomalies = self.fetch_anomalies_for_rca()
         if anomalies.empty:
-            print("No anomalies found that need RCA processing (all have rca_confidence values).")
+            print("No network-related anomalies found that need RCA processing.")
+            print("Creating a test network anomaly for demonstration...")
+            
+            # Create a test anomaly for demonstration
+            test_anomaly = {
+                "txn_id": "test_network_001",
+                "service": "Gateway_A",
+                "metric": "latency_ms",
+                "value": 3500,
+                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "z_score": 1.5
+            }
+            
+            desc = f"{test_anomaly['service']} {test_anomaly['metric']} network anomaly: {test_anomaly['value']} at {test_anomaly['timestamp']}"
+            best_doc, best_similarity = self.query_similar_patterns(desc)
+            rca_summary = self.prompt_llm(test_anomaly, [best_doc] if best_doc else [])
+
+            # Calculate each factor
+            success_rate = self.get_success_rate(test_anomaly, [best_doc] if best_doc else [])
+            similarity = self.get_similarity(test_anomaly, (best_doc, best_similarity))
+            severity = self.get_severity(test_anomaly)
+            sla_urgency = self.get_sla_urgency(test_anomaly)
+
+            confidence = self.calculate_confidence_score(success_rate, similarity, severity, sla_urgency)
+
+            self.save_to_chroma(rca_summary, test_anomaly, confidence)
+            self.save_to_mysql(rca_summary, test_anomaly, confidence)
+            print("Test network anomaly processed and saved.")
             return
 
-        print(f"Processing {len(anomalies)} anomalies for RCA...")
+        print(f"Processing {len(anomalies)} network-related anomalies for RCA...")
         for _, row in anomalies.iterrows():
             anomaly = row.to_dict()
-            desc = f"{anomaly['service']} {anomaly['metric']} anomaly: {anomaly['value']} at {anomaly['timestamp']}"
+            desc = f"{anomaly['service']} {anomaly['metric']} network anomaly: {anomaly['value']} at {anomaly['timestamp']}"
             best_doc, best_similarity = self.query_similar_patterns(desc)
             rca_summary = self.prompt_llm(anomaly, [best_doc] if best_doc else [])
 
@@ -252,8 +303,7 @@ Provide a brief, clear reasoning summary.
             self.save_to_chroma(rca_summary, anomaly, confidence)
             self.save_to_mysql(rca_summary, anomaly, confidence)
         
-        print(f"RCA processing completed for {len(anomalies)} anomalies.")
+        print(f"Network RCA processing completed for {len(anomalies)} anomalies.")
  
 if __name__ == "__main__":
     RCAReasoningAgent().run()
- 
