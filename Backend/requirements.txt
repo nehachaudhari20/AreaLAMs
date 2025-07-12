@@ -1,4 +1,4 @@
-setuptools>=42
+setuptools>=65.0.0
 wheel
 
 pandas==2.0.3
