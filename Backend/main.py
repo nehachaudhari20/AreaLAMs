@@ -7,6 +7,10 @@ from datetime import datetime
 import sys
 
 # Add error handling for imports
+FailureDetectionAgent = None
+PatternDetectorAgent = None
+RCAReasoningAgent = None
+
 try:
     from RCA.failure_detection import FailureDetectionAgent
     from RCA.pattern import PatternDetectorAgent
@@ -18,7 +22,7 @@ except Exception as e:
     print(f"Files in current directory: {os.listdir('.')}")
     if os.path.exists('RCA'):
         print(f"Files in RCA directory: {os.listdir('RCA')}")
-    sys.exit(1)
+    print("⚠️ Continuing without agents - app will still start")
 
 app = FastAPI(title="RCA Unified Processor")
  
