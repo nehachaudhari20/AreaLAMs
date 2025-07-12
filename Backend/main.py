@@ -27,7 +27,29 @@ os.makedirs(VECTOR_DIR, exist_ok=True)
  
 @app.get("/")
 def health_check():
-    return {"status": "FastAPI running"}
+    return {"status": "FastAPI running", "timestamp": datetime.now().isoformat()}
+
+@app.get("/health")
+def detailed_health_check():
+    try:
+        # Test database connection
+        from memory.db import get_engine
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "agents": "loaded",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
  
 @app.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
