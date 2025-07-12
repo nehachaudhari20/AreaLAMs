@@ -14,6 +14,10 @@ try:
     print("✅ All agents imported successfully")
 except Exception as e:
     print(f"❌ Import error: {e}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Files in current directory: {os.listdir('.')}")
+    if os.path.exists('RCA'):
+        print(f"Files in RCA directory: {os.listdir('RCA')}")
     sys.exit(1)
 
 app = FastAPI(title="RCA Unified Processor")

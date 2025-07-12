@@ -15,4 +15,6 @@ sentence-transformers==2.2.2
 groq==0.29.0
 python-multipart==0.0.6
 pydantic==2.5.0
+torch==2.0.1
+transformers==4.35.0
 
