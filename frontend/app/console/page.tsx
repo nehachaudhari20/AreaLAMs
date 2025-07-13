@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { BackendURL } from "../data/url";
 // import { useRouter } from "next/navigation";
 
 interface ConsoleEntry {
@@ -100,7 +101,7 @@ const Console = () => {
       try {
         console.log(dataIndex)
         setIsLoading(true);
-        const response = await fetch("http://127.0.0.1:8000/api/failure-detection", {
+        const response = await fetch(BackendURL+"/api/failure-detection", {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
