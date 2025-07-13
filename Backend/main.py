@@ -39,10 +39,13 @@ app.add_middleware(
  
 # ✅ Directories
 UPLOAD_DIR = "uploaded_data"
-VECTOR_DIR = "vector_db/vector_store"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+<<<<<<< HEAD
 os.makedirs(VECTOR_DIR, exist_ok=True)
  
+=======
+
+>>>>>>> 649c15d50f5e72d04974849f69bad995fefaed0a
 # ✅ Routes
 @app.get("/")
 def health_check():
@@ -187,5 +190,5 @@ async def agents_status():
 # ✅ ✅ ✅ This is what Render NEEDS to detect the app and port
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 8000)) 
+    uvicorn.run(app, host="0.0.0.0", port=port)

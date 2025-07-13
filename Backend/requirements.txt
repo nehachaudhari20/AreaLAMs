@@ -1,17 +1,3 @@
-pandas
-numpy 
-fastapi 
-uvicorn 
-requests 
-langchain 
-openai
-psycopg2-binary
-mysql-connector-python 
-sqlalchemy
-cryptography
-chromadb
-python-dotenv
-pymysql
 pandas>=2.1.4
 numpy>=1.25.2
 fastapi==0.104.1

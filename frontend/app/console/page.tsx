@@ -1,92 +1,186 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Pause, SkipForward, Square } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { BackendURL } from "../data/url";
+// import { useRouter } from "next/navigation";
 
 interface ConsoleEntry {
   id: string;
   timestamp: string;
-  agent: "Security" | "RCA" | "SLA" | "Fix";
+  agent: "FailureDetectionAgent" | "Security" | "RCA" | "SLA" | "Fix";
   message: string;
   type: "info" | "success" | "warning" | "error";
   transactionId: string;
+  service?: string;
+  metric?: string;
+  value?: number;
+  zScore?: number;
+}
+
+interface AnomalyData {
+  status: string;
+  txn_id: string;
+  service: string;
+  metric: string;
+  value: number;
+  timestamp: string;
+  z_score: number;
+}
+
+interface BackendResponse {
+  agent: string;
+  status: string;
+  data: AnomalyData[];
+  timestamp: string;
 }
 
 const Console = () => {
   const [entries, setEntries] = useState<ConsoleEntry[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [currentTransaction, setCurrentTransaction] = useState(1);
+  console.log(currentTransaction)
   const [totalTransactions] = useState(500);
-  const [speed, setSpeed] = useState(1);
+  const [backendData, setBackendData] = useState<AnomalyData[]>([]);
+  const [dataIndex, setDataIndex] = useState(0);
   const consoleRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
+  // const router = useRouter();
+
   const agentColors = {
+    FailureDetectionAgent: "text-red-600",
     Security: "text-blue-600",
     RCA: "text-green-600",
     SLA: "text-purple-600",
     Fix: "text-orange-600",
   };
 
-  const mockMessages = React.useMemo(
-    () => [
-      {
-        agent: "Security",
-        message: "Validating transaction security",
-        type: "info",
-      },
-      {
-        agent: "Security",
-        message: "Security validation passed",
-        type: "success",
-      },
-      {
-        agent: "RCA",
-        message: "Analyzing root cause for timeout error",
-        type: "info",
-      },
-      {
-        agent: "RCA",
-        message: "Gateway timeout detected - 30s threshold exceeded",
-        type: "warning",
-      },
-      { agent: "SLA", message: "Calculating SLA impact score", type: "info" },
-      {
-        agent: "SLA",
-        message: "SLA impact: 85% (acceptable)",
-        type: "success",
-      },
-      {
-        agent: "Fix",
-        message: "Applying retry logic with increased timeout",
-        type: "info",
-      },
-      {
-        agent: "Fix",
-        message: "Fix applied successfully - retry initiated",
-        type: "success",
-      },
-    ],
-    []
-  );
+  // const mockMessages = React.useMemo(
+  //   () => [
+  //     {
+  //       agent: "Security",
+  //       message: "Validating transaction security",
+  //       type: "info",
+  //     },
+  //     {
+  //       agent: "Security",
+  //       message: "Security validation passed",
+  //       type: "success",
+  //     },
+  //     {
+  //       agent: "RCA",
+  //       message: "Analyzing root cause for timeout error",
+  //       type: "info",
+  //     },
+  //     {
+  //       agent: "RCA",
+  //       message: "Gateway timeout detected - 30s threshold exceeded",
+  //       type: "warning",
+  //     },
+  //     { agent: "SLA", message: "Calculating SLA impact score", type: "info" },
+  //     {
+  //       agent: "SLA",
+  //       message: "SLA impact: 85% (acceptable)",
+  //       type: "success",
+  //     },
+  //     {
+  //       agent: "Fix",
+  //       message: "Applying retry logic with increased timeout",
+  //       type: "info",
+  //     },
+  //     {
+  //       agent: "Fix",
+  //       message: "Fix applied successfully - retry initiated",
+  //       type: "success",
+  //     },
+  //   ],
+  //   []
+  // );
 
+  // Fetch data on component mount
   useEffect(() => {
-    setTimeout(() => {
-     setIsRunning(false);
-      router.push("/dashboard");
-    }, 10000 / speed);
-    setIsRunning(true);
-    if (isRunning && !isPaused) {
-      const interval = setInterval(() => {
-        if (isRunning && !isPaused) {
-          addConsoleEntry();
+    const fetchData = async () => {
+      try {
+        console.log(dataIndex)
+        setIsLoading(true);
+        const response = await fetch(BackendURL+"/api/failure-detection", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({})
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      }, 1000 / speed); 
-      return () => clearInterval(interval);
-    }
-    
-  }, [isRunning, isPaused, speed]);
+
+        const data: BackendResponse = await response.json();
+        console.log(data);
+        
+        // Store the backend data and reset index
+        setBackendData(data.data);
+        setDataIndex(0);
+        
+        // Add initial entry showing the agent status
+        const initialEntry: ConsoleEntry = {
+          id: `init-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(),
+          agent: "FailureDetectionAgent",
+          message: `Agent initialized - Found ${data.data.length} anomalies to process`,
+          type: "info",
+          transactionId: "SYSTEM",
+        };
+        
+        setEntries([initialEntry]);
+        
+        // Start processing anomalies automatically
+        setTimeout(() => {
+          processAnomalies(data.data);
+        }, 1000);
+        
+      } catch (error) {
+        console.error('Error:', error);
+        
+        // Add error entry to console
+        const errorEntry: ConsoleEntry = {
+          id: `error-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(),
+          agent: "FailureDetectionAgent",
+          message: `Failed to fetch data from backend: ${error}`,
+          type: "error",
+          transactionId: "SYSTEM",
+        };
+        
+        setEntries([errorEntry]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Process anomalies with a delay to simulate real-time
+  const processAnomalies = (anomalies: AnomalyData[]) => {
+    anomalies.forEach((anomaly, index) => {
+      setTimeout(() => {
+        const newEntry: ConsoleEntry = {
+          id: `${Date.now()}-${index}`,
+          timestamp: new Date(anomaly.timestamp).toLocaleTimeString(),
+          agent: "FailureDetectionAgent",
+          message: formatAnomalyMessage(anomaly),
+          type: getAnomalyType(anomaly.z_score),
+          transactionId: `TXN_ID${String(index + 1).padStart(3, '0')}`,
+          service: anomaly.service,
+          metric: anomaly.metric,
+          value: anomaly.value,
+          zScore: anomaly.z_score,
+        };
+
+        setEntries(prev => [...prev, newEntry]);
+        setCurrentTransaction(prev => Math.min(prev + 1, totalTransactions));
+      }, (index + 1) * 1500); // 1.5 second delay between each entry
+    });
+  };
 
   useEffect(() => {
     if (consoleRef.current) {
@@ -94,49 +188,29 @@ const Console = () => {
     }
   }, [entries]);
 
-  const addConsoleEntry = React.useCallback(() => {
-    const randomMessage =
-      mockMessages[Math.floor(Math.random() * mockMessages.length)];
-    const newEntry: ConsoleEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toLocaleTimeString(),
-      agent: randomMessage.agent as "Security" | "RCA" | "SLA" | "Fix",
-      message: randomMessage.message,
-      type: randomMessage.type as "info" | "success" | "warning" | "error",
-      transactionId: `TXN-${currentTransaction.toString().padStart(3, "0")}`,
-    };
-
-    setEntries((prev) => [...prev, newEntry]);
-
-    // Advance transaction occasionally
-    if (Math.random() < 0.3 && currentTransaction < totalTransactions) {
-      setCurrentTransaction((prev) => prev + 1);
-    }
-  }, [mockMessages, currentTransaction, totalTransactions]);
-
-  const startSimulation = () => {
-    setIsRunning(true);
-    setIsPaused(false);
+  const formatAnomalyMessage = (anomaly: AnomalyData): string => {
+    const severity = anomaly.z_score > 5 ? "CRITICAL" : anomaly.z_score > 3 ? "HIGH" : "MEDIUM";
+    return `${severity} anomaly detected in ${anomaly.service} - ${anomaly.metric}: ${anomaly.value} (Z-Score: ${anomaly.z_score.toFixed(2)})`;
   };
 
-  const pauseSimulation = () => {
-    setIsPaused(true);
-  };
-
-  const stopSimulation = () => {
-    setIsRunning(false);
-    setIsPaused(false);
-  };
-
-  const nextStep = () => {
-    addConsoleEntry();
+  const getAnomalyType = (zScore: number): "info" | "success" | "warning" | "error" => {
+    if (zScore > 5) return "error";
+    if (zScore > 3) return "warning";
+    return "info";
   };
 
   const clearConsole = () => {
     setEntries([]);
+    setDataIndex(0);
   };
 
-  const progressPercentage = (currentTransaction / totalTransactions) * 100;
+  // const progressPercentage = (currentTransaction / totalTransactions) * 100;
+
+  // Calculate stats from actual entries
+  const anomalyCount = entries.filter(e => e.agent === "FailureDetectionAgent").length;
+  const criticalCount = entries.filter(e => e.type === "error").length;
+  const warningCount = entries.filter(e => e.type === "warning").length;
+  const servicesAffected = [...new Set(entries.filter(e => e.service).map(e => e.service))].length;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -152,55 +226,24 @@ const Console = () => {
 
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">Speed:</span>
-            <select
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              className="border border-gray-300 rounded px-2 py-1 text-sm"
-            >
-              <option value={0.5}>0.5x</option>
-              <option value={1}>1x</option>
-              <option value={2}>2x</option>
-              <option value={5}>5x</option>
-            </select>
+            <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></div>
+            <span className="text-sm text-gray-600">
+              {isLoading ? 'Loading...' : `${backendData.length} anomalies loaded`}
+            </span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={isRunning ? pauseSimulation : startSimulation}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              {isRunning ? (
-                <Pause className="w-4 h-4" />
-              ) : (
-                <Play className="w-4 h-4" />
-              )}
-              <span>{isRunning ? "Pause" : "Start"}</span>
-            </button>
-
-            <button
-              onClick={nextStep}
-              disabled={isRunning && !isPaused}
-              className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              <SkipForward className="w-4 h-4" />
-              <span>Next</span>
-            </button>
-
-            <button
-              onClick={stopSimulation}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <Square className="w-4 h-4" />
-              <span>Stop</span>
-            </button>
-          </div>
+          <button
+            onClick={clearConsole}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <span>Clear Console</span>
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
-          <div className="bg-gray-900 rounded-xl p-4 h-96 relative">
+          <div className="bg-gray-900 rounded-xl p-4 h-[80vh] relative">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-green-400 font-mono text-sm">
                 LAM Agent Console
@@ -215,7 +258,7 @@ const Console = () => {
 
             <div
               ref={consoleRef}
-              className="overflow-y-auto h-80 font-mono text-sm space-y-1"
+              className="overflow-y-auto h-[70vh] font-mono text-sm space-y-1"
             >
               {entries.map((entry) => (
                 <div key={entry.id} className="flex items-start space-x-2">
@@ -245,12 +288,23 @@ const Console = () => {
                   >
                     {entry.message}
                   </span>
+                  {entry.service && (
+                    <span className="text-blue-400 text-xs">
+                      [{entry.service}]
+                    </span>
+                  )}
                 </div>
               ))}
 
-              {entries.length === 0 && (
+              {entries.length === 0 && isLoading && (
                 <div className="text-gray-400 text-center py-8">
-                  {` Console ready. Click "Start" to begin simulation.`}
+                  <div className="animate-pulse">Loading anomaly data from backend...</div>
+                </div>
+              )}
+
+              {entries.length === 0 && !isLoading && (
+                <div className="text-gray-400 text-center py-8">
+                  No data available. Please check your backend connection.
                 </div>
               )}
             </div>
@@ -264,19 +318,19 @@ const Console = () => {
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Processing Transaction</span>
+                <span className="text-gray-600">Anomalies Processed</span>
                 <span className="font-semibold">
-                  {currentTransaction} of {totalTransactions}
+                  {Math.max(0, entries.length - 1)} of {backendData.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${progressPercentage}%` }}
+                  style={{ width: `${backendData.length > 0 ? ((Math.max(0, entries.length - 1)) / backendData.length) * 100 : 0}%` }}
                 ></div>
               </div>
               <div className="text-xs text-gray-500">
-                {progressPercentage.toFixed(1)}% complete
+                {backendData.length > 0 ? (((Math.max(0, entries.length - 1)) / backendData.length) * 100).toFixed(1) : 0}% complete
               </div>
             </div>
           </div>
@@ -286,6 +340,17 @@ const Console = () => {
               Agent Status
             </h3>
             <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-red-600 font-medium">
+                  FailureDetectionAgent
+                </span>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${!isLoading && backendData.length > 0 ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                  <span className="text-xs text-gray-600">
+                    {isLoading ? 'Loading...' : backendData.length > 0 ? 'Active' : 'Idle'}
+                  </span>
+                </div>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-blue-600 font-medium">
                   Security
@@ -325,30 +390,24 @@ const Console = () => {
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Processed</span>
+                <span className="text-sm text-gray-600">Total Entries</span>
                 <span className="font-semibold">{entries.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Fixes Applied</span>
-                <span className="font-semibold text-green-600">
-                  {
-                    entries.filter(
-                      (e) => e.type === "success" && e.agent === "Fix"
-                    ).length
-                  }
-                </span>
+                <span className="text-sm text-gray-600">Anomalies Detected</span>
+                <span className="font-semibold text-red-600">{anomalyCount}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Errors</span>
-                <span className="font-semibold text-red-600">
-                  {entries.filter((e) => e.type === "error").length}
-                </span>
+                <span className="text-sm text-gray-600">Critical Issues</span>
+                <span className="font-semibold text-red-600">{criticalCount}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Warnings</span>
-                <span className="font-semibold text-yellow-600">
-                  {entries.filter((e) => e.type === "warning").length}
-                </span>
+                <span className="font-semibold text-yellow-600">{warningCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Services Affected</span>
+                <span className="font-semibold text-blue-600">{servicesAffected}</span>
               </div>
             </div>
           </div>
