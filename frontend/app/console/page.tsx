@@ -73,7 +73,7 @@ const Console = () => {
 
   useEffect(() => {
     setTimeout(() => {
-     setIsRunning(false);
+      setIsRunning(false);
       router.push("/dashboard");
     }, 10000 / speed);
     setIsRunning(true);
@@ -82,10 +82,9 @@ const Console = () => {
         if (isRunning && !isPaused) {
           addConsoleEntry();
         }
-      }, 1000 / speed); 
+      }, 1000 / speed);
       return () => clearInterval(interval);
     }
-    
   }, [isRunning, isPaused, speed]);
 
   useEffect(() => {
@@ -123,9 +122,22 @@ const Console = () => {
     setIsPaused(true);
   };
 
-  const stopSimulation = () => {
-    setIsRunning(false);
-    setIsPaused(false);
+  const stopSimulation = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/stop-simulation", {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error:", error);
+      throw error;
+    }
   };
 
   const nextStep = () => {
