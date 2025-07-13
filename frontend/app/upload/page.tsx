@@ -147,7 +147,7 @@ const Upload = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="gap-3 ">
         <div>
           <div
             className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
@@ -235,42 +235,12 @@ const Upload = () => {
             </div>
           )}
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Simulation Settings</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Processing Speed
-                </label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
-                  <option>Real-time (1x)</option>
-                  <option>Fast (5x)</option>
-                  <option>Turbo (10x)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Agent Verbosity
-                </label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
-                  <option>Detailed</option>
-                  <option>Standard</option>
-                  <option>Minimal</option>
-                </select>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input type="checkbox" id="autoFix" className="rounded" />
-                <label htmlFor="autoFix" className="text-sm text-gray-700">
-                  Enable automatic fixes
-                </label>
-              </div>
-            </div>
-          </div>
+        
 
           <button
             onClick={startSimulation}
             disabled={!file || isProcessing}
-            className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
+            className={`w-full py-3 px-4 rounded-lg font-medium transition-colors mt-4 ${
               !file || isProcessing
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-green-600 text-white hover:bg-green-700'

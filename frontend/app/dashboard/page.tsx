@@ -16,7 +16,7 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
-  CheckCircle,
+  // CheckCircle,
   Clock,
   LocateFixed,
 } from "lucide-react";
@@ -76,8 +76,15 @@ const Dashboard = () => {
       icon: Clock,
       color: "bg-blue-500",
     },
+    // {
+    //   title: "SLA Breaches",
+    //   value: stats.slaBreaches.toLocaleString(),
+    //   change: -8,
+    //   icon: AlertCircle,
+    //   color: "bg-red-500",
+    // },
     {
-      title: "SLA Breaches",
+      title: "Failure Detected",
       value: stats.slaBreaches.toLocaleString(),
       change: -8,
       icon: AlertCircle,
@@ -90,13 +97,7 @@ const Dashboard = () => {
       icon: LocateFixed,
       color: "bg-yellow-500",
     },
-    {
-      title: "Fixes Applied",
-      value: stats.fixesApplied.toLocaleString(),
-      change: 15,
-      icon: CheckCircle,
-      color: "bg-green-500",
-    },
+   
     {
       title: "Success Rate",
       value: `${Math.round(
