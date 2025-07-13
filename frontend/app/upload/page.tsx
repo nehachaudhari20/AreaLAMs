@@ -1,18 +1,22 @@
 "use client";
 import React, { useState, useRef } from 'react';
 import { Upload as UploadIcon, File, CheckCircle, AlertCircle } from 'lucide-react';
-import {  useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { BackendURL } from '../data/url';
 
 const Upload = () => {
+  
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  
   type CsvData = { headers: string[]; rows: Record<string, string>[] };
   type JsonData = Record<string, unknown> | unknown[];
   type FileData = JsonData | CsvData | null;
   const [fileData, setFileData] = useState<FileData>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter()
+  const router = useRouter();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -87,6 +91,7 @@ const Upload = () => {
     
     if (validFile) {
       setFile(validFile);
+      setUploadError(null); // Clear any previous errors
       console.log('📁 File selected:', validFile.name);
       console.log('📏 File size:', validFile.size, 'bytes');
       console.log('📂 File type:', validFile.type);
@@ -100,6 +105,7 @@ const Upload = () => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
+      setUploadError(null); // Clear any previous errors
       console.log('📁 File selected:', selectedFile.name);
       console.log('📏 File size:', selectedFile.size, 'bytes');
       console.log('📂 File type:', selectedFile.type);
@@ -109,18 +115,60 @@ const Upload = () => {
     }
   };
 
-  const startSimulation = () => {
+  const startSimulation = async () => {
+    if (!file) {
+      setUploadError('Please select a file first');
+      return;
+    }
+
     setIsProcessing(true);
+    setUploadError(null);
     
     // Log the file data one more time before starting simulation
     if (fileData) {
       console.log('🚀 Starting simulation with data:', fileData);
     }
     
-    // Simulate processing time
-    setTimeout(() => {
+    try {
+      // Create FormData to send the file
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // Add additional metadata if needed
+      formData.append('fileName', file.name);
+      formData.append('fileSize', file.size.toString());
+      formData.append('fileType', file.type || 'unknown');
+      
+      // If you want to send parsed data as well
+      if (fileData) {
+        formData.append('parsedData', JSON.stringify(fileData));
+      }
+
+      console.log('📤 Uploading file to backend...');
+      
+      const response = await fetch(`${BackendURL}/upload`, {
+        method: 'POST',
+        body: formData,
+        // Note: Don't set Content-Type header for FormData, let the browser set it
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Upload successful:', result);
+      
+      // Navigate to console page after successful upload
       router.push('/console');
-    }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Upload error:', error);
+      setUploadError(error instanceof Error ? error.message : 'Upload failed. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -235,7 +283,18 @@ const Upload = () => {
             </div>
           )}
 
-        
+          {/* Error Message */}
+          {uploadError && (
+            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="flex items-start space-x-3">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-red-800">Upload Error</p>
+                  <p className="text-red-600">{uploadError}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={startSimulation}
@@ -249,14 +308,14 @@ const Upload = () => {
             {isProcessing ? (
               <div className="flex items-center justify-center space-x-2">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Processing...</span>
+                <span>Uploading...</span>
               </div>
             ) : (
               'Start Simulation'
             )}
           </button>
 
-          {file && (
+          {file && !uploadError && (
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
               <div className="flex items-start space-x-3">
                 <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -264,7 +323,7 @@ const Upload = () => {
                   <p className="font-medium text-blue-800">Ready to start simulation</p>
                   <p className="text-blue-600">
                     The LAM agents will process approximately {getEstimatedTransactions().toLocaleString()} transactions 
-                    from your uploaded file. Check the browser console for detailed file data.
+                    from your uploaded file. Click "Start Simulation" to upload the file and begin processing.
                   </p>
                 </div>
               </div>
