@@ -1,9 +1,17 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request, Body
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
 from datetime import datetime
+import sys
+import pandas as pd
+from sqlalchemy import text
+from memory.db import get_engine
+import platform
+import subprocess
+import time
+
 
 # Agent imports with fallback
 FailureDetectionAgent = None
@@ -22,10 +30,6 @@ except Exception as e:
     if os.path.exists('RCA'):
         print(f"Files in RCA directory: {os.listdir('RCA')}")
     print("Continuing without agents - app will still start")
-
-# For DB insert
-from memory.db import get_engine
-import pandas as pd
 
 app = FastAPI(title="RCA Unified Processor")
 
@@ -71,21 +75,66 @@ async def upload_and_store(file: UploadFile = File(...)):
         content = await file.read()
         transactions = json.loads(content)
 
-        # Save file locally (optional, can comment out)
-        filename = f"data_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-        file_path = os.path.join(UPLOAD_DIR, filename)
-        with open(file_path, "wb") as f:
-            f.write(content)
+        if not isinstance(transactions, list):
+            return JSONResponse(content={"error": "Uploaded data must be a list of transactions"}, status_code=400)
 
-        # Insert into lamx_transactions table
         engine = get_engine()
-        df = pd.DataFrame(transactions)
-        df.to_sql("lamx_transactions", engine, if_exists="append", index=False)
+        inserted, skipped = 0, 0
+        errors = []
 
-        return JSONResponse(content={"message": "uploaded!"}, status_code=200)
+        with engine.connect() as conn:
+            for i, txn in enumerate(transactions):
+                if not isinstance(txn, dict):
+                    errors.append(f"Transaction {i+1}: Invalid format (not a dictionary)")
+                    continue
 
+                txn_id = txn.get('txn_id')
+                if txn_id:
+                    result = conn.execute(
+                        text("SELECT COUNT(*) FROM lamx_transactions WHERE txn_id = :txn_id"),
+                        {"txn_id": txn_id}
+                    ).fetchone()
+                    if result[0] > 0:
+                        skipped += 1
+                        continue
+
+                try:
+                    result = conn.execute(text("SELECT COALESCE(MAX(serial_no), 0) + 1 FROM lamx_transactions")).fetchone()
+                    txn['serial_no'] = result[0] if result and result[0] else 1
+                except:
+                    txn['serial_no'] = int(datetime.now().timestamp())
+
+                required_fields = ['txn_id', 'acc_no', 'status']
+                missing = [field for field in required_fields if field not in txn]
+                if missing:
+                    errors.append(f"Transaction {i+1}: Missing required fields: {missing}")
+                    continue
+
+                keys = txn.keys()
+                columns = ', '.join(keys)
+                values = ', '.join([f":{k}" for k in keys])
+                insert_stmt = text(f"INSERT INTO lamx_transactions ({columns}) VALUES ({values})")
+
+                try:
+                    conn.execute(insert_stmt, txn)
+                    inserted += 1
+                except Exception as db_err:
+                    errors.append(f"Transaction {i+1} ({txn_id}): {str(db_err)}")
+
+            conn.commit()
+
+        return JSONResponse(content={
+            "status": "success",
+            "inserted": inserted,
+            "skipped": skipped,
+            "total_uploaded": len(transactions),
+            "errors": errors if errors else None
+        }, status_code=200)
+
+    except json.JSONDecodeError as e:
+        return JSONResponse(content={"error": f"Invalid JSON format: {str(e)}"}, status_code=400)
     except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        return JSONResponse(content={"error": f"Upload failed: {str(e)}"}, status_code=500)
 
 @app.post("/api/failure-detection")
 async def failure_detection_endpoint():
@@ -125,28 +174,56 @@ async def pattern_detection_endpoint():
             "timestamp": datetime.now().isoformat()
         }, status_code=500)
 
-from fastapi import Request
-
 @app.post("/api/rca-reasoning")
 async def rca_reasoning_endpoint(request: Request):
     try:
         data = await request.json()
         transactions = data.get("transactions", [])
         rca_agent = RCAReasoningAgent()
-        results = []
+
+        # First run: default run
+        rca_agent.run()
+
+        # Fetch from DB
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT txn_id, service, metric, value, timestamp, z_score, 
+                       rca_summary, rca_confidence
+                FROM anomaly_logs 
+                WHERE rca_summary IS NOT NULL AND rca_confidence IS NOT NULL
+                ORDER BY timestamp DESC
+            """)).fetchall()
+
+        rca_results = [{
+            "txn_id": row[0],
+            "service": row[1],
+            "metric": row[2],
+            "value": row[3],
+            "timestamp": str(row[4]),
+            "z_score": row[5],
+            "rca_summary": row[6],
+            "rca_confidence": float(row[7]) if row[7] else None
+        } for row in result]
+
+        # Second pass: run per transaction
+        txn_results = []
         for txn in transactions:
-            result = rca_agent.run(txn)
-            results.append({
+            output = rca_agent.run(txn)
+            txn_results.append({
                 "txn_id": txn.get("txn_id"),
-                "summary": result.get("summary"),
-                "confidence": result.get("confidence"),
+                "summary": output.get("summary"),
+                "confidence": output.get("confidence"),
             })
+
         return JSONResponse(content={
             "agent": "RCAReasoningAgent",
             "status": "success",
-            "results": results,
+            "data_from_db": rca_results,
+            "results_from_input": txn_results,
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
+
     except Exception as e:
         return JSONResponse(content={
             "agent": "RCAReasoningAgent",
@@ -154,7 +231,6 @@ async def rca_reasoning_endpoint(request: Request):
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }, status_code=500)
-
 
 @app.get("/api/agents/status")
 async def agents_status():
@@ -167,6 +243,112 @@ async def agents_status():
         "timestamp": datetime.now().isoformat()
     }, status_code=200)
 
+IS_WINDOWS = platform.system().lower() == "windows"
+LOGS = []
+
+def is_admin():
+    if IS_WINDOWS:
+        try:
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            return False
+    return os.geteuid() == 0
+
+def run_command(command_list):
+    if not IS_WINDOWS and not is_admin():
+        command_list.insert(0, "sudo")
+    try:
+        output = subprocess.check_output(command_list, stderr=subprocess.STDOUT, text=True)
+        return {"status": "success", "output": output.strip()}
+    except subprocess.CalledProcessError as e:
+        return {"status": "error", "output": e.output.strip()}
+
+@app.post("/restart/service")
+def restart_service(service_name: str = Body(..., embed=True)):
+    timestamp = datetime.now().isoformat()
+    if IS_WINDOWS:
+        stop_result = run_command(["sc", "stop", service_name])
+        if stop_result["status"] == "success" or "1062" in stop_result.get("output", ""):
+            for _ in range(30):
+                query_result = run_command(["sc", "query", service_name])
+                if query_result["status"] == "success" and "STOPPED" in query_result["output"]:
+                    break
+                time.sleep(1)
+            else:
+                return {"status": "error", "output": f"Service '{service_name}' did not stop."}
+        start_result = run_command(["sc", "start", service_name])
+        result = {
+            "status": "partial" if start_result["status"] == "error" else "success",
+            "output": {
+                "initial_stop_result": stop_result,
+                "final_start_result": start_result
+            }
+        }
+    else:
+        result = run_command(["systemctl", "restart", service_name])
+
+    LOGS.append({"time": timestamp, "action": "restart", "target": service_name, "result": result})
+    return result
+
+@app.post("/flush/dns")
+def flush_dns():
+    timestamp = datetime.now().isoformat()
+    result = run_command(["ipconfig", "/flushdns"] if IS_WINDOWS else ["resolvectl", "flush-caches"])
+    LOGS.append({"time": timestamp, "action": "flush_dns", "result": result})
+    return result
+
+@app.post("/run/task")
+def run_task(task_name: str = Body(..., embed=True)):
+    timestamp = datetime.now().isoformat()
+    if IS_WINDOWS:
+        result = run_command(["schtasks", "/Run", "/TN", task_name])
+    else:
+        result = {"status": "error", "output": "Task Scheduler not supported on Linux"}
+    LOGS.append({"time": timestamp, "action": "run_task", "target": task_name, "result": result})
+    return result
+
+@app.post("/network/reset")
+def network_reset():
+    timestamp = datetime.now().isoformat()
+    if IS_WINDOWS:
+        if not is_admin():
+            return {"status": "error", "output": "Administrator privileges are required. Please run the agent as Administrator."}
+        ps_command = "Get-NetAdapter | Where-Object {$_.Status -ne 'Not Present'} | Restart-NetAdapter -Confirm:$false"
+        result = run_command(["powershell", "-Command", ps_command])
+    else:
+        result = {"status": "error", "output": "Network reset only implemented for Windows."}
+
+    LOGS.append({"time": timestamp, "action": "network_reset_powershell", "result": result})
+    return result
+
+@app.post("/network/winsock-reset")
+def reset_winsock():
+    timestamp = datetime.now().isoformat()
+    if IS_WINDOWS:
+        if not is_admin():
+            return {"status": "error", "output": "Administrator privileges are required. Please run the agent as Administrator."}
+        result = run_command(["netsh", "winsock", "reset"])
+        if result["status"] == "success":
+            result["output"] += "\n\nA computer restart is required to complete the Winsock reset."
+            result["restart_required"] = True
+    else:
+        result = {"status": "error", "output": "This action is only implemented for Windows."}
+
+    LOGS.append({"time": timestamp, "action": "winsock_reset", "result": result})
+    return result
+
+@app.get("/logs")
+def get_logs():
+    return {"logs": LOGS}
+
+@app.get("/whoami")
+def whoami():
+    return {
+        "is_windows": IS_WINDOWS,
+        "is_admin": is_admin(),
+        "user": os.environ.get("USERNAME") if IS_WINDOWS else os.getlogin()
+    }
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

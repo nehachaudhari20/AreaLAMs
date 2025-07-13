@@ -12,10 +12,20 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BackendURL } from "../data/url";
 
+interface Transaction {
+  txn_id: string;
+  service: string;
+  metric: string;
+  value: string;
+  z_score: string;
+  status: string;
+  timestamp: string;
+}
+
 const Transactions = () => {
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [serviceFilter, setServiceFilter] = useState("all");
   const [metricFilter, setMetricFilter] = useState("all");
@@ -26,37 +36,50 @@ const Transactions = () => {
     const fetchTransactions = async () => {
       try {
         setLoading(true);
-        console.log('Fetching from URL:', BackendURL + '/api/failure-detection');
-        
+        console.log(
+          "Fetching from URL:",
+          BackendURL + "/api/failure-detection"
+        );
+
         const response = await fetch(BackendURL + "/api/failure-detection", {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify({})
+          body: JSON.stringify({}),
         });
-        
-        console.log('Response status:', response.status);
-        console.log('Response ok:', response.ok);
-        
+
+        console.log("Response status:", response.status);
+        console.log("Response ok:", response.ok);
+
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+          throw new Error(
+            `HTTP error! status: ${response.status} - ${response.statusText}`
+          );
         }
-        
+
         const result = await response.json();
-        console.log('API Response:', result);
-        
+        console.log("API Response:", result);
+
         // Check if the response has the expected structure
-        if (result.status === 'success' && result.data && Array.isArray(result.data)) {
+        if (
+          result.status === "success" &&
+          result.data &&
+          Array.isArray(result.data)
+        ) {
           setTransactions(result.data);
-          console.log('Transactions loaded:', result.data.length);
+          console.log("Transactions loaded:", result.data.length);
         } else {
-          console.error('Invalid response format:', result);
-          throw new Error(`Invalid response format. Expected success status but got: ${result.status || 'unknown'}`);
+          console.error("Invalid response format:", result);
+          throw new Error(
+            `Invalid response format. Expected success status but got: ${
+              result.status || "unknown"
+            }`
+          );
         }
       } catch (err) {
-        console.error('Fetch error:', err);
-        setError(`${err.message}. Please check console for more details.`);
+        console.error("Fetch error:", err);
+        setError(`${err}. Please check console for more details.`);
       } finally {
         setLoading(false);
       }
@@ -66,16 +89,30 @@ const Transactions = () => {
   }, []);
 
   // Get unique values for filters
-  const uniqueServices = [...new Set(transactions.map(t => t.service).filter(Boolean))];
-  const uniqueMetrics = [...new Set(transactions.map(t => t.metric).filter(Boolean))];
-  const uniqueStatuses = [...new Set(transactions.map(t => t.status).filter(Boolean))];
+  const uniqueServices = [
+    ...new Set(transactions.map((t) => t.service).filter(Boolean)),
+  ];
+  const uniqueMetrics = [
+    ...new Set(transactions.map((t) => t.metric).filter(Boolean)),
+  ];
+  const uniqueStatuses = [
+    ...new Set(transactions.map((t) => t.status).filter(Boolean)),
+  ];
 
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
-      (transaction.txn_id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (transaction.service || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (transaction.metric || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (transaction.status || "").toLowerCase().includes(searchTerm.toLowerCase());
+      (transaction.txn_id || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (transaction.service || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (transaction.metric || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (transaction.status || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
 
     const matchesService =
       serviceFilter === "all" || transaction.service === serviceFilter;
@@ -87,7 +124,7 @@ const Transactions = () => {
     return matchesSearch && matchesService && matchesMetric && matchesStatus;
   });
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case "anomaly_detected":
         return <AlertTriangle className="w-4 h-4 text-red-600" />;
@@ -100,7 +137,7 @@ const Transactions = () => {
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "anomaly_detected":
         return "bg-red-100 text-red-800";
@@ -113,11 +150,11 @@ const Transactions = () => {
     }
   };
 
-  const formatValue = (value) => {
+  const formatValue = (value: string) => {
     return value !== null && value !== undefined ? value : "-";
   };
 
-  const formatZScore = (zScore) => {
+  const formatZScore = (zScore: string) => {
     if (zScore !== null && zScore !== undefined) {
       return Number(zScore).toFixed(2);
     }
@@ -152,12 +189,21 @@ const Transactions = () => {
             Failure Detection Transactions
           </h1>
           <p className="text-gray-600">
-            Detailed view of all failure detection transactions with filtering and
-            search capabilities
+            Detailed view of all failure detection transactions with filtering
+            and search capabilities
           </p>
         </div>
+
         <Button className="inline-flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors">
-          <span>View Report</span>
+          <span>
+            {serviceFilter === "DNS_Resolver"
+              ? "Network Restart"
+              : serviceFilter === "Gateway_A"
+              ? "Service Restart"
+              : serviceFilter === "UPI_Service"
+              ? "Remove Transactions"
+              : "View Report"}
+          </span>
         </Button>
       </div>
 
@@ -182,8 +228,10 @@ const Transactions = () => {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Services</option>
-                {uniqueServices.map(service => (
-                  <option key={service} value={service}>{service}</option>
+                {uniqueServices.map((service) => (
+                  <option key={service} value={service}>
+                    {service}
+                  </option>
                 ))}
               </select>
 
@@ -193,8 +241,10 @@ const Transactions = () => {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Metrics</option>
-                {uniqueMetrics.map(metric => (
-                  <option key={metric} value={metric}>{metric}</option>
+                {uniqueMetrics.map((metric) => (
+                  <option key={metric} value={metric}>
+                    {metric}
+                  </option>
                 ))}
               </select>
 
@@ -204,8 +254,10 @@ const Transactions = () => {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Statuses</option>
-                {uniqueStatuses.map(status => (
-                  <option key={status} value={status}>{status}</option>
+                {uniqueStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
                 ))}
               </select>
             </div>
@@ -244,7 +296,10 @@ const Transactions = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredTransactions.map((transaction, index) => (
-                <tr key={transaction.txn_id || index} className="hover:bg-gray-50">
+                <tr
+                  key={transaction.txn_id || index}
+                  className="hover:bg-gray-50"
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
                       {formatValue(transaction.txn_id)}
