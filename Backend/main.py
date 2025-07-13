@@ -1,21 +1,81 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 import os
 import json
 from datetime import datetime
+<<<<<<< HEAD
  
 from RCA.failure_detection import FailureDetectionAgent
 from RCA.pattern import PatternDetectorAgent
 from RCA.rca_reasoning import RCAReasoningAgent
  
+=======
+import sys
+
+# Add error handling for imports
+FailureDetectionAgent = None
+PatternDetectorAgent = None
+RCAReasoningAgent = None
+
+try:
+    from RCA.failure_detection import FailureDetectionAgent
+    from RCA.pattern import PatternDetectorAgent
+    from RCA.rca_reasoning import RCAReasoningAgent
+    print("✅ All agents imported successfully")
+except Exception as e:
+    print(f"❌ Import error: {e}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Files in current directory: {os.listdir('.')}")
+    if os.path.exists('RCA'):
+        print(f"Files in RCA directory: {os.listdir('RCA')}")
+    print("⚠️ Continuing without agents - app will still start")
+
+>>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
 app = FastAPI(title="RCA Unified Processor")
  
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+<<<<<<< HEAD
  
 @app.get("/")
 def health_check():
     return {"status": "FastAPI running"}
+=======
+
+# Create necessary directories for agents
+VECTOR_DIR = "vector_db/vector_store"
+os.makedirs(VECTOR_DIR, exist_ok=True)
+ 
+@app.get("/")
+def health_check():
+    return {"status": "FastAPI running", "timestamp": datetime.now().isoformat()}
+
+@app.get("/health")
+def detailed_health_check():
+    try:
+        # Test database connection
+        from memory.db import get_engine
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "agents": "loaded",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+>>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
  
 @app.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
@@ -150,4 +210,9 @@ async def agents_status():
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
+<<<<<<< HEAD
         return JSONResponse(content={"error": str(e)}, status_code=500)
+=======
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+>>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
