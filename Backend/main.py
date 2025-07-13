@@ -1,17 +1,16 @@
-# ✅ Add this at the top (already present)
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 import os
 import json
-from datetime import datetime
 import sys
-from fastapi.middleware.cors import CORSMiddleware
-
+ 
 # ✅ Agent imports (with fallback)
 FailureDetectionAgent = None
 PatternDetectorAgent = None
 RCAReasoningAgent = None
-
+ 
 try:
     from RCA.failure_detection import FailureDetectionAgent
     from RCA.pattern import PatternDetectorAgent
@@ -24,12 +23,12 @@ except Exception as e:
     if os.path.exists('RCA'):
         print(f"Files in RCA directory: {os.listdir('RCA')}")
     print("Continuing without agents - app will still start")
-
+ 
 # ✅ FastAPI app init
 app = FastAPI(title="RCA Unified Processor")
-
+ 
 origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
-
+ 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -38,20 +37,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
  
-UPLOAD_DIR = "uploaded_data"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 # ✅ Directories
 UPLOAD_DIR = "uploaded_data"
 VECTOR_DIR = "vector_db/vector_store"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(VECTOR_DIR, exist_ok=True)
-
+ 
 # ✅ Routes
 @app.get("/")
 def health_check():
     return {"status": "FastAPI running", "timestamp": datetime.now().isoformat()}
-
+ 
 @app.get("/health")
 def detailed_health_check():
     try:
@@ -71,7 +67,7 @@ def detailed_health_check():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
-
+ 
 @app.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
     try:
@@ -80,19 +76,19 @@ async def upload_and_process(file: UploadFile = File(...)):
         file_path = os.path.join(UPLOAD_DIR, filename)
         with open(file_path, "wb") as f:
             f.write(content)
-
+ 
         transactions = json.loads(content)
         results = []
-
+ 
         failure_agent = FailureDetectionAgent()
         pattern_agent = PatternDetectorAgent()
         rca_agent = RCAReasoningAgent()
-
+ 
         try:
             failure_result = failure_agent.run()
             pattern_result = pattern_agent.run()
             rca_result = rca_agent.run()
-
+ 
             for txn in transactions:
                 txn_id = txn.get("txn_id")
                 acc_no = txn.get("acc_no")
@@ -103,7 +99,7 @@ async def upload_and_process(file: UploadFile = File(...)):
                     "matched_pattern": pattern_result,
                     "rca_result": rca_result
                 })
-
+ 
         except Exception as agent_error:
             for txn in transactions:
                 txn_id = txn.get("txn_id")
@@ -113,12 +109,12 @@ async def upload_and_process(file: UploadFile = File(...)):
                     "acc_no": acc_no,
                     "error": f"Agent processing failed: {str(agent_error)}"
                 })
-
+ 
         return JSONResponse(content={"results": results}, status_code=200)
-
+ 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
+ 
 # ✅ Agent endpoints
 @app.post("/api/failure-detection")
 async def failure_detection_endpoint():
@@ -138,7 +134,7 @@ async def failure_detection_endpoint():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }, status_code=500)
-
+ 
 @app.post("/api/pattern-detection")
 async def pattern_detection_endpoint():
     try:
@@ -157,7 +153,7 @@ async def pattern_detection_endpoint():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }, status_code=500)
-
+ 
 @app.post("/api/rca-reasoning")
 async def rca_reasoning_endpoint():
     try:
@@ -176,7 +172,7 @@ async def rca_reasoning_endpoint():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }, status_code=500)
-
+ 
 @app.get("/api/agents/status")
 async def agents_status():
     return JSONResponse(content={
@@ -187,8 +183,9 @@ async def agents_status():
         },
         "timestamp": datetime.now().isoformat()
     }, status_code=200)
-
+ 
 # ✅ ✅ ✅ This is what Render NEEDS to detect the app and port
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
