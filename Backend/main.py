@@ -1,3 +1,4 @@
+# ✅ Add this at the top (already present)
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 import os
@@ -6,7 +7,7 @@ from datetime import datetime
 import sys
 from fastapi.middleware.cors import CORSMiddleware
 
-# Add error handling for imports
+# ✅ Agent imports (with fallback)
 FailureDetectionAgent = None
 PatternDetectorAgent = None
 RCAReasoningAgent = None
@@ -24,6 +25,7 @@ except Exception as e:
         print(f"Files in RCA directory: {os.listdir('RCA')}")
     print("Continuing without agents - app will still start")
 
+# ✅ FastAPI app init
 app = FastAPI(title="RCA Unified Processor")
 
 origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -39,7 +41,13 @@ app.add_middleware(
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
- 
+# ✅ Directories
+UPLOAD_DIR = "uploaded_data"
+VECTOR_DIR = "vector_db/vector_store"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(VECTOR_DIR, exist_ok=True)
+
+# ✅ Routes
 @app.get("/")
 def health_check():
     return {"status": "FastAPI running", "timestamp": datetime.now().isoformat()}
@@ -47,12 +55,10 @@ def health_check():
 @app.get("/health")
 def detailed_health_check():
     try:
-        # Test database connection
         from memory.db import get_engine
         engine = get_engine()
         with engine.connect() as conn:
             conn.execute("SELECT 1")
-        
         return {
             "status": "healthy",
             "database": "connected",
@@ -65,51 +71,40 @@ def detailed_health_check():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
- 
+
 @app.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
     try:
-        # Save uploaded file
         content = await file.read()
         filename = f"data_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
         file_path = os.path.join(UPLOAD_DIR, filename)
         with open(file_path, "wb") as f:
             f.write(content)
 
-        # Parse transactions
         transactions = json.loads(content)
         results = []
 
-        # Initialize agents once (more efficient)
         failure_agent = FailureDetectionAgent()
         pattern_agent = PatternDetectorAgent()
         rca_agent = RCAReasoningAgent()
 
         try:
-            # Run agents to get analysis results
             failure_result = failure_agent.run()
             pattern_result = pattern_agent.run()
             rca_result = rca_agent.run()
 
-            # Process each transaction with the analysis results
             for txn in transactions:
                 txn_id = txn.get("txn_id")
                 acc_no = txn.get("acc_no")
-
-                # Create result entry with proper data types
-                result_entry = {
+                results.append({
                     "txn_id": txn_id,
                     "acc_no": acc_no,
-                    "failure_detected": failure_result if failure_result else [],
-                    "matched_pattern": pattern_result if pattern_result else None,
-                    "rca_result": rca_result if rca_result else None,
-                }
-
-                results.append(result_entry)
+                    "failure_detected": failure_result or [],
+                    "matched_pattern": pattern_result,
+                    "rca_result": rca_result
+                })
 
         except Exception as agent_error:
-            print(f"Agent processing failed: {str(agent_error)}")
-            # Return error for all transactions
             for txn in transactions:
                 txn_id = txn.get("txn_id")
                 acc_no = txn.get("acc_no")
@@ -122,20 +117,18 @@ async def upload_and_process(file: UploadFile = File(...)):
         return JSONResponse(content={"results": results}, status_code=200)
 
     except Exception as e:
-        print("Upload processing failed:", str(e))
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# Individual Agent Endpoints
+# ✅ Agent endpoints
 @app.post("/api/failure-detection")
 async def failure_detection_endpoint():
-    """Endpoint for Failure Detection Agent"""
     try:
         failure_agent = FailureDetectionAgent()
         result = failure_agent.run()
         return JSONResponse(content={
             "agent": "FailureDetectionAgent",
             "status": "success",
-            "data": result if result else [],
+            "data": result or [],
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
@@ -148,14 +141,13 @@ async def failure_detection_endpoint():
 
 @app.post("/api/pattern-detection")
 async def pattern_detection_endpoint():
-    """Endpoint for Pattern Detection Agent"""
     try:
         pattern_agent = PatternDetectorAgent()
         result = pattern_agent.run()
         return JSONResponse(content={
             "agent": "PatternDetectorAgent",
             "status": "success",
-            "data": result if result else None,
+            "data": result,
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
@@ -168,14 +160,13 @@ async def pattern_detection_endpoint():
 
 @app.post("/api/rca-reasoning")
 async def rca_reasoning_endpoint():
-    """Endpoint for RCA Reasoning Agent"""
     try:
         rca_agent = RCAReasoningAgent()
         result = rca_agent.run()
         return JSONResponse(content={
             "agent": "RCAReasoningAgent",
             "status": "success",
-            "data": result if result else None,
+            "data": result,
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
@@ -188,16 +179,16 @@ async def rca_reasoning_endpoint():
 
 @app.get("/api/agents/status")
 async def agents_status():
-    """Get status of all agents"""
-    try:
-        return JSONResponse(content={
-            "agents": {
-                "FailureDetectionAgent": "available",
-                "PatternDetectorAgent": "available", 
-                "RCAReasoningAgent": "available"
-            },
-            "timestamp": datetime.now().isoformat()
-        }, status_code=200)
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+    return JSONResponse(content={
+        "agents": {
+            "FailureDetectionAgent": "available",
+            "PatternDetectorAgent": "available",
+            "RCAReasoningAgent": "available"
+        },
+        "timestamp": datetime.now().isoformat()
+    }, status_code=200)
 
+# ✅ ✅ ✅ This is what Render NEEDS to detect the app and port
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
