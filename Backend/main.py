@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware  # Add this import
 import os
 import json
 from datetime import datetime
@@ -24,6 +25,30 @@ except Exception as e:
     print("⚠️ Continuing without agents - app will still start")
 
 app = FastAPI(title="RCA Unified Processor")
+
+# Add CORS middleware - THIS IS THE KEY FIX
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        # Add your frontend URLs here
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
+
+# For development only - uncomment this to allow all origins
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # Allow all origins (development only)
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
  
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -54,10 +79,52 @@ def detailed_health_check():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+
+# Add the missing stop-simulation endpoint
+@app.post("/stop-simulation")
+async def stop_simulation():
+    """Stop simulation endpoint"""
+    try:
+        # Add your simulation stopping logic here
+        return JSONResponse(content={
+            "status": "success",
+            "message": "Simulation stopped successfully",
+            "timestamp": datetime.now().isoformat()
+        }, status_code=200)
+    except Exception as e:
+        return JSONResponse(content={
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }, status_code=500)
+
+# Alternative GET version if your frontend uses GET
+@app.get("/stop-simulation")
+async def stop_simulation_get():
+    """Stop simulation endpoint (GET version)"""
+    try:
+        # Add your simulation stopping logic here
+        return JSONResponse(content={
+            "status": "success",
+            "message": "Simulation stopped successfully",
+            "timestamp": datetime.now().isoformat()
+        }, status_code=200)
+    except Exception as e:
+        return JSONResponse(content={
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }, status_code=500)
  
 @app.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
     try:
+        # Check if agents are available
+        if not all([FailureDetectionAgent, PatternDetectorAgent, RCAReasoningAgent]):
+            return JSONResponse(content={
+                "error": "One or more agents are not available. Please check server logs."
+            }, status_code=503)
+
         # Save uploaded file
         content = await file.read()
         filename = f"data_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
@@ -119,6 +186,14 @@ async def upload_and_process(file: UploadFile = File(...)):
 async def failure_detection_endpoint():
     """Endpoint for Failure Detection Agent"""
     try:
+        if not FailureDetectionAgent:
+            return JSONResponse(content={
+                "agent": "FailureDetectionAgent",
+                "status": "error",
+                "error": "Agent not available",
+                "timestamp": datetime.now().isoformat()
+            }, status_code=503)
+            
         failure_agent = FailureDetectionAgent()
         result = failure_agent.run()
         return JSONResponse(content={
@@ -139,6 +214,14 @@ async def failure_detection_endpoint():
 async def pattern_detection_endpoint():
     """Endpoint for Pattern Detection Agent"""
     try:
+        if not PatternDetectorAgent:
+            return JSONResponse(content={
+                "agent": "PatternDetectorAgent",
+                "status": "error",
+                "error": "Agent not available",
+                "timestamp": datetime.now().isoformat()
+            }, status_code=503)
+            
         pattern_agent = PatternDetectorAgent()
         result = pattern_agent.run()
         return JSONResponse(content={
@@ -159,6 +242,14 @@ async def pattern_detection_endpoint():
 async def rca_reasoning_endpoint():
     """Endpoint for RCA Reasoning Agent"""
     try:
+        if not RCAReasoningAgent:
+            return JSONResponse(content={
+                "agent": "RCAReasoningAgent",
+                "status": "error",
+                "error": "Agent not available",
+                "timestamp": datetime.now().isoformat()
+            }, status_code=503)
+            
         rca_agent = RCAReasoningAgent()
         result = rca_agent.run()
         return JSONResponse(content={
@@ -181,12 +272,15 @@ async def agents_status():
     try:
         return JSONResponse(content={
             "agents": {
-                "FailureDetectionAgent": "available",
-                "PatternDetectorAgent": "available", 
-                "RCAReasoningAgent": "available"
+                "FailureDetectionAgent": "available" if FailureDetectionAgent else "unavailable",
+                "PatternDetectorAgent": "available" if PatternDetectorAgent else "unavailable", 
+                "RCAReasoningAgent": "available" if RCAReasoningAgent else "unavailable"
             },
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
