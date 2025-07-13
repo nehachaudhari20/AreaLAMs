@@ -1,4 +1,3 @@
-
 pandas
 numpy 
 fastapi 
@@ -13,7 +12,6 @@ cryptography
 chromadb
 python-dotenv
 pymysql
-=======
 pandas>=2.1.4
 numpy>=1.25.2
 fastapi==0.104.1
@@ -35,4 +33,3 @@ groq==0.29.0
 python-multipart==0.0.6
 pydantic==2.5.0
 scikit-learn>=1.3.0
->>>>>>> c0474973eb5ee7acfffa2ebf17037997bb2abfbb
