@@ -1,19 +1,9 @@
-<<<<<<< HEAD
-=======
 
->>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 import os
 import json
 from datetime import datetime
-<<<<<<< HEAD
- 
-from RCA.failure_detection import FailureDetectionAgent
-from RCA.pattern import PatternDetectorAgent
-from RCA.rca_reasoning import RCAReasoningAgent
- 
-=======
 import sys
 
 # Add error handling for imports
@@ -34,17 +24,10 @@ except Exception as e:
         print(f"Files in RCA directory: {os.listdir('RCA')}")
     print("⚠️ Continuing without agents - app will still start")
 
->>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
 app = FastAPI(title="RCA Unified Processor")
  
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-<<<<<<< HEAD
- 
-@app.get("/")
-def health_check():
-    return {"status": "FastAPI running"}
-=======
 
 # Create necessary directories for agents
 VECTOR_DIR = "vector_db/vector_store"
@@ -75,7 +58,6 @@ def detailed_health_check():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
->>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
  
 @app.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
@@ -210,9 +192,4 @@ async def agents_status():
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
-<<<<<<< HEAD
         return JSONResponse(content={"error": str(e)}, status_code=500)
-=======
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
->>>>>>> daf6af8fa85581cae4aafcdee43b4514fceaf9c7
