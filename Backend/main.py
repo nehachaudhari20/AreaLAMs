@@ -4,6 +4,7 @@ import os
 import json
 from datetime import datetime
 import sys
+from fastapi.middleware.cors import CORSMiddleware
 
 # Add error handling for imports
 FailureDetectionAgent = None
@@ -14,16 +15,26 @@ try:
     from RCA.failure_detection import FailureDetectionAgent
     from RCA.pattern import PatternDetectorAgent
     from RCA.rca_reasoning import RCAReasoningAgent
-    print("✅ All agents imported successfully")
+    print("All agents imported successfully")
 except Exception as e:
-    print(f"❌ Import error: {e}")
+    print(f"Import error: {e}")
     print(f"Current working directory: {os.getcwd()}")
     print(f"Files in current directory: {os.listdir('.')}")
     if os.path.exists('RCA'):
         print(f"Files in RCA directory: {os.listdir('RCA')}")
-    print("⚠️ Continuing without agents - app will still start")
+    print("Continuing without agents - app will still start")
 
 app = FastAPI(title="RCA Unified Processor")
+
+origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
  
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
