@@ -1,6 +1,6 @@
 # vector_db/add_to_db.py
 
-from vectordb.chroma_client import get_chroma_collection
+from chroma_client import get_chroma_collection 
 
 def add_failure_summary(doc_text, txn_id, service, error_code):
     collection = get_chroma_collection()
