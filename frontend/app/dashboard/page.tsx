@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   XAxis,
   YAxis,
@@ -16,14 +16,86 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
-  // CheckCircle,
   Clock,
   LocateFixed,
 } from "lucide-react";
 import { mockDashboardStats } from "../data/mockData";
+import { BackendURL } from "../data/url";
+// import { BackendURL } from "../data/url";
 
 const Dashboard = () => {
+  const [apiData, setApiData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
   const stats = mockDashboardStats;
+
+  // Fetch data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        console.log('Fetching from URL:', BackendURL + '/api/failure-detection');
+        
+        const response = await fetch(BackendURL + "/api/failure-detection", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({})
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('API Response:', result);
+        
+        // Check if the response has the expected structure
+        if (result.status === 'success' && result.data && Array.isArray(result.data)) {
+          setApiData(result.data);
+          console.log('Data loaded:', result.data.length);
+        } else {
+          console.error('Invalid response format:', result);
+          throw new Error(`Invalid response format. Expected success status but got: ${result.status || 'unknown'}`);
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+        setError(`${err.message}. Please check console for more details.`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Process API data for service distribution
+  const getServiceDistribution = () => {
+    if (!apiData || apiData.length === 0) {
+      return [];
+    }
+
+    const serviceCounts = {};
+    const total = apiData.length;
+
+    // Count occurrences of each service
+    apiData.forEach(transaction => {
+      const service = transaction.service || 'Unknown';
+      serviceCounts[service] = (serviceCounts[service] || 0) + 1;
+    });
+
+    // Convert to pie chart format with percentages
+    return Object.entries(serviceCounts).map(([service, count]) => ({
+      name: service,
+      value: count,
+      percentage: ((count / total) * 100).toFixed(1)
+    }));
+  };
 
   // ===== EDITABLE CONFIGURATION =====
   const config = {
@@ -52,7 +124,7 @@ const Dashboard = () => {
       confidenceTitle: "Fix Confidence Heatmap",
       confidenceSubtitle: "Confidence scores by quarter and performance level",
       performanceTitle: "Agent Performance",
-      errorTypesTitle: "Error Types Distribution",
+      errorTypesTitle: "Service Distribution",
       slaTrendTitle: "SLA Trend",
     },
   };
@@ -71,37 +143,29 @@ const Dashboard = () => {
   const getStatCardConfig = () => [
     {
       title: "Total Transactions",
-      value: stats.totalTransactions.toLocaleString(),
+      value: apiData.length.toLocaleString(),
       change: 12,
       icon: Clock,
       color: "bg-blue-500",
     },
-    // {
-    //   title: "SLA Breaches",
-    //   value: stats.slaBreaches.toLocaleString(),
-    //   change: -8,
-    //   icon: AlertCircle,
-    //   color: "bg-red-500",
-    // },
     {
       title: "Failure Detected",
-      value: stats.slaBreaches.toLocaleString(),
+      value: apiData.filter(t => t.status === 'anomaly_detected').length.toLocaleString(),
       change: -8,
       icon: AlertCircle,
       color: "bg-red-500",
     },
     {
       title: "SLA Breaches Encountered",
-      value: stats.slaBreaches.toLocaleString(),
+      value: apiData.filter(t => t.status === 'warning').length.toLocaleString(),
       change: -8,
       icon: LocateFixed,
       color: "bg-yellow-500",
     },
-   
     {
       title: "Success Rate",
       value: `${Math.round(
-        (stats.fixesApplied / stats.totalTransactions) * 100
+        (apiData.filter(t => t.status === 'normal').length / (apiData.length || 1)) * 100
       )}%`,
       change: 3,
       icon: TrendingUp,
@@ -208,14 +272,57 @@ const Dashboard = () => {
     </div>
   );
 
-  // Error Type Chart Component
-  const ErrorTypeChart = () => {
-    const errorTypeData = Object.entries(stats.errorTypes).map(
-      ([key, value]) => ({
-        name: key,
-        value: value,
-      })
-    );
+  // Service Distribution Chart Component (Updated)
+  const ServiceDistributionChart = () => {
+    const serviceData = getServiceDistribution();
+
+    if (loading) {
+      return (
+        <div
+          className={`bg-white ${config.layout.borderRadius} ${config.layout.cardPadding} shadow-sm border border-gray-200`}
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {config.text.errorTypesTitle}
+          </h3>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div
+          className={`bg-white ${config.layout.borderRadius} ${config.layout.cardPadding} shadow-sm border border-gray-200`}
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {config.text.errorTypesTitle}
+          </h3>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-red-500 text-center">
+              <p>Error loading data</p>
+              <p className="text-sm mt-2">{error}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (serviceData.length === 0) {
+      return (
+        <div
+          className={`bg-white ${config.layout.borderRadius} ${config.layout.cardPadding} shadow-sm border border-gray-200`}
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {config.text.errorTypesTitle}
+          </h3>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-gray-500">No data available</div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div
@@ -227,27 +334,47 @@ const Dashboard = () => {
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
             <Pie
-              data={errorTypeData}
+              data={serviceData}
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={({ name, percent }) =>
-                `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-              }
+              label={({ name, percentage }) => `${name} ${percentage}%`}
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"
             >
-              {errorTypeData.map((entry, index) => (
+              {serviceData.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
                   fill={getChartColors()[index % getChartColors().length]}
                 />
               ))}
             </Pie>
-            <Tooltip />
+            <Tooltip 
+              formatter={(value, name) => [
+                `${value} transactions (${serviceData.find(d => d.name === name)?.percentage}%)`,
+                'Count'
+              ]}
+            />
           </PieChart>
         </ResponsiveContainer>
+        
+        {/* Legend */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {serviceData.map((entry, index) => (
+            <div key={entry.name} className="flex items-center">
+              <div
+                className="w-3 h-3 rounded-full mr-2"
+                style={{
+                  backgroundColor: getChartColors()[index % getChartColors().length]
+                }}
+              />
+              <span className="text-sm text-gray-600">
+                {entry.name}: {entry.percentage}%
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -255,7 +382,7 @@ const Dashboard = () => {
   // SLA Trend Chart Component
   const SLATrendChart = () => (
     <div
-      className={`bg-white ${config.layout.borderRadius} ${config.layout.cardPadding} shadow-sm border border-gray-2000`}
+      className={`bg-white ${config.layout.borderRadius} ${config.layout.cardPadding} shadow-sm border border-gray-200`}
     >
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
         {config.text.slaTrendTitle}
@@ -469,7 +596,7 @@ const Dashboard = () => {
     <div
       className={`grid grid-cols-1 lg:grid-cols-2 ${config.layout.gridGap} mb-8`}
     >
-      <ErrorTypeChart />
+      <ServiceDistributionChart />
       <SLATrendChart />
     </div>
   );
@@ -481,6 +608,18 @@ const Dashboard = () => {
       <PerformanceMetrics />
     </div>
   );
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className={`${config.layout.maxWidth} mx-auto`}>
+        <Header />
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Loading dashboard data...</div>
+        </div>
+      </div>
+    );
+  }
 
   // ===== MAIN RENDER =====
   return (

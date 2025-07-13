@@ -4,7 +4,7 @@ const config = {
   schema: "./app/api/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.NEXT_PUBLIC_DRIZZLE_DB_URL!,
+    url: "mysql+mysqlconnector://admin:yaswanth@llm.c0n8k0a0swtz.us-east-1.rds.amazonaws.com:3306/lamx_data",
   },
 };
 
