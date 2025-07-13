@@ -27,7 +27,10 @@ app = FastAPI(title="RCA Unified Processor")
  
 UPLOAD_DIR = "uploaded_data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
- 
+
+# Create necessary directories for agents
+VECTOR_DIR = "vector_db/vector_store"
+os.makedirs(VECTOR_DIR, exist_ok=True)
  
 @app.get("/")
 def health_check():
