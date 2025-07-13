@@ -39,8 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploaded_data"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/")
 def health_check():
@@ -135,12 +133,100 @@ async def upload_and_store(file: UploadFile = File(...)):
 @app.post("/api/failure-detection")
 async def failure_detection_endpoint():
     try:
+        engine = get_engine()
+        
+        # Step 1: Create new_uploaded_data table if it doesn't exist
+        with engine.connect() as conn:
+            create_table_query = text("""
+                CREATE TABLE IF NOT EXISTS new_uploaded_data (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    txn_id VARCHAR(255),
+                    acc_no VARCHAR(255),
+                    status VARCHAR(50),
+                    amount DECIMAL(10,2),
+                    gateway VARCHAR(100),
+                    region VARCHAR(100),
+                    service VARCHAR(100),
+                    trace_id VARCHAR(255),
+                    span_id VARCHAR(255),
+                    error_code VARCHAR(100),
+                    latency_ms INT,
+                    cpu DECIMAL(5,2),
+                    memory_usage DECIMAL(5,2),
+                    error_count INT,
+                    total_requests INT,
+                    timestamp DATETIME,
+                    serial_no INT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute(create_table_query)
+            conn.commit()
+        
+        # Step 2: Move new data from lamx_transactions to new_uploaded_data
+        with engine.connect() as conn:
+            # Get the latest processed timestamp from anomaly_logs
+            latest_processed_query = text("""
+                SELECT MAX(timestamp) as latest_processed 
+                FROM anomaly_logs 
+                WHERE timestamp IS NOT NULL
+            """)
+            result = conn.execute(latest_processed_query).fetchone()
+            latest_processed = result[0] if result and result[0] else None
+            
+            # Get the actual columns from lamx_transactions table
+            columns_query = text("SHOW COLUMNS FROM lamx_transactions")
+            columns_result = conn.execute(columns_query).fetchall()
+            lamx_columns = [col[0] for col in columns_result]
+            
+            # Define the columns we want to insert into new_uploaded_data
+            target_columns = ['txn_id', 'acc_no', 'status', 'amount', 'gateway', 'region', 'service', 
+                            'trace_id', 'span_id', 'error_code', 'latency_ms', 'cpu', 'memory_usage', 
+                            'error_count', 'total_requests', 'timestamp', 'serial_no']
+            
+            # Filter columns that exist in lamx_transactions
+            available_columns = [col for col in target_columns if col in lamx_columns]
+            columns_str = ', '.join(available_columns)
+            select_columns_str = ', '.join(available_columns)
+            
+            # Insert new data into new_uploaded_data
+            if latest_processed:
+                insert_new_data_query = text(f"""
+                    INSERT INTO new_uploaded_data 
+                    ({columns_str})
+                    SELECT {select_columns_str}
+                    FROM lamx_transactions 
+                    WHERE timestamp > :latest_processed AND status = 'fail' AND latency_ms IS NOT NULL
+                """)
+                conn.execute(insert_new_data_query, {"latest_processed": latest_processed})
+            else:
+                # If no previous data, process all failed transactions
+                insert_all_data_query = text(f"""
+                    INSERT INTO new_uploaded_data 
+                    ({columns_str})
+                    SELECT {select_columns_str}
+                    FROM lamx_transactions 
+                    WHERE status = 'fail' AND latency_ms IS NOT NULL
+                """)
+                conn.execute(insert_all_data_query)
+            
+            conn.commit()
+        
+        # Step 3: Run failure detection on new data only
         failure_agent = FailureDetectionAgent()
         result = failure_agent.run()
+        
+        # Step 4: Clear the new_uploaded_data table after processing
+        with engine.connect() as conn:
+            clear_table_query = text("DELETE FROM new_uploaded_data")
+            conn.execute(clear_table_query)
+            conn.commit()
+        
         return JSONResponse(content={
             "agent": "FailureDetectionAgent",
             "status": "success",
             "data": result or [],
+            "processed_new_data": True,
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
     except Exception as e:
