@@ -1,21 +1,22 @@
-# reset_chroma_collection.py
+# vectordb/test.py
 
-from chroma_client import get_chroma_collection
+import chromadb
 
-def reset_chroma_collection():
-    collection = get_chroma_collection()
+try:
+    # Make sure the client path is correct and matches your chroma_client.py
+    client = chromadb.PersistentClient(path="./backend/vector_db/vector_store")
 
-    # Fetch all IDs (returned by default)
-    results = collection.get()  # No include=["ids"]
-    all_ids = results["ids"]
+    print("🔍 Existing collections:")
+    for col in client.list_collections():
+        print(" -", col.name)
 
-    if not all_ids:
-        print("🟢 Collection is already empty.")
-        return
+    # Attempt to delete the collection
+    client.delete_collection(name="failure_patterns")
+    print("🗑️ Deleted collection: failure_patterns")
 
-    # Delete all documents
-    collection.delete(ids=all_ids)
-    print(f"🗑️ Deleted {len(all_ids)} documents from ChromaDB collection.")
+    # Recreate a fresh collection
+    client.create_collection(name="failure_patterns")
+    print("✅ Recreated collection: failure_patterns")
 
-if __name__ == "__main__":
-    reset_chroma_collection()
+except Exception as e:
+    print("❌ Error during Chroma reset:", e)
