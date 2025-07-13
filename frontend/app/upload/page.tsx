@@ -323,7 +323,9 @@ const Upload = () => {
                   <p className="font-medium text-blue-800">Ready to start simulation</p>
                   <p className="text-blue-600">
                     The LAM agents will process approximately {getEstimatedTransactions().toLocaleString()} transactions 
-                    from your uploaded file. Click "Start Simulation" to upload the file and begin processing.
+                    from your uploaded file. Click Start Simulation to upload the file and begin processing.
+
+                    from your uploaded file. Click Start Simulation to upload the file and begin processing.
                   </p>
                 </div>
               </div>

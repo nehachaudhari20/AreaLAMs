@@ -1,71 +1,158 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   ExternalLink,
   CheckCircle,
   XCircle,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
-import { mockTransactions } from "../data/mockData";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { BackendURL } from "../data/url";
 
 const Transactions = () => {
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [regionFilter, setRegionFilter] = useState("all");
-  const [errorTypeFilter, setErrorTypeFilter] = useState("all");
-  const [fixStatusFilter, setFixStatusFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
+  const [metricFilter, setMetricFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const filteredTransactions = mockTransactions.filter((transaction) => {
+  // Fetch data from API
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true);
+        console.log('Fetching from URL:', BackendURL + '/api/failure-detection');
+        
+        const response = await fetch(BackendURL + "/api/failure-detection", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({})
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('API Response:', result);
+        
+        // Check if the response has the expected structure
+        if (result.status === 'success' && result.data && Array.isArray(result.data)) {
+          setTransactions(result.data);
+          console.log('Transactions loaded:', result.data.length);
+        } else {
+          console.error('Invalid response format:', result);
+          throw new Error(`Invalid response format. Expected success status but got: ${result.status || 'unknown'}`);
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+        setError(`${err.message}. Please check console for more details.`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, []);
+
+  // Get unique values for filters
+  const uniqueServices = [...new Set(transactions.map(t => t.service).filter(Boolean))];
+  const uniqueMetrics = [...new Set(transactions.map(t => t.metric).filter(Boolean))];
+  const uniqueStatuses = [...new Set(transactions.map(t => t.status).filter(Boolean))];
+
+  const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
-      transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.complaint.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.errorCode.toLowerCase().includes(searchTerm.toLowerCase());
+      (transaction.txn_id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.service || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.metric || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.status || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesRegion =
-      regionFilter === "all" || transaction.region === regionFilter;
-    const matchesErrorType =
-      errorTypeFilter === "all" || transaction.errorType === errorTypeFilter;
-    const matchesFixStatus =
-      fixStatusFilter === "all" || transaction.fixStatus === fixStatusFilter;
+    const matchesService =
+      serviceFilter === "all" || transaction.service === serviceFilter;
+    const matchesMetric =
+      metricFilter === "all" || transaction.metric === metricFilter;
+    const matchesStatus =
+      statusFilter === "all" || transaction.status === statusFilter;
 
-    return (
-      matchesSearch && matchesRegion && matchesErrorType && matchesFixStatus
-    );
+    return matchesSearch && matchesService && matchesMetric && matchesStatus;
   });
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status) => {
     switch (status) {
-      case "applied":
+      case "anomaly_detected":
+        return <AlertTriangle className="w-4 h-4 text-red-600" />;
+      case "normal":
         return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case "failed":
-        return <XCircle className="w-4 h-4 text-red-600" />;
-      default:
+      case "warning":
         return <Clock className="w-4 h-4 text-yellow-600" />;
+      default:
+        return <XCircle className="w-4 h-4 text-gray-600" />;
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status) => {
     switch (status) {
-      case "applied":
-        return "bg-green-100 text-green-800";
-      case "failed":
+      case "anomaly_detected":
         return "bg-red-100 text-red-800";
-      default:
+      case "normal":
+        return "bg-green-100 text-green-800";
+      case "warning":
         return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
+
+  const formatValue = (value) => {
+    return value !== null && value !== undefined ? value : "-";
+  };
+
+  const formatZScore = (zScore) => {
+    if (zScore !== null && zScore !== undefined) {
+      return Number(zScore).toFixed(2);
+    }
+    return "-";
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Loading transactions...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-red-500">Error: {error}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className=" flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Transactions
+            Failure Detection Transactions
           </h1>
           <p className="text-gray-600">
-            Detailed view of all processed transactions with filtering and
+            Detailed view of all failure detection transactions with filtering and
             search capabilities
           </p>
         </div>
@@ -90,36 +177,36 @@ const Transactions = () => {
 
             <div className="flex gap-2">
               <select
-                value={regionFilter}
-                onChange={(e) => setRegionFilter(e.target.value)}
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="all">All Regions</option>
-                <option value="US-East">US East</option>
-                <option value="US-West">US West</option>
-                <option value="EU-West">EU West</option>
+                <option value="all">All Services</option>
+                {uniqueServices.map(service => (
+                  <option key={service} value={service}>{service}</option>
+                ))}
               </select>
 
               <select
-                value={errorTypeFilter}
-                onChange={(e) => setErrorTypeFilter(e.target.value)}
+                value={metricFilter}
+                onChange={(e) => setMetricFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="all">All Error Types</option>
-                <option value="Timeout">Timeout</option>
-                <option value="Validation">Validation</option>
-                <option value="Insufficient Funds">Insufficient Funds</option>
+                <option value="all">All Metrics</option>
+                {uniqueMetrics.map(metric => (
+                  <option key={metric} value={metric}>{metric}</option>
+                ))}
               </select>
 
               <select
-                value={fixStatusFilter}
-                onChange={(e) => setFixStatusFilter(e.target.value)}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Statuses</option>
-                <option value="applied">Applied</option>
-                <option value="failed">Failed</option>
-                <option value="pending">Pending</option>
+                {uniqueStatuses.map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -133,25 +220,22 @@ const Transactions = () => {
                   Transaction ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Complaint
+                  Service
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Error Code
+                  Metric
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Gateway
+                  Value
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Region
+                  Z-Score
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Retry Attempts
+                  Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SLA Score
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fix Status
+                  Timestamp
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -159,66 +243,56 @@ const Transactions = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTransactions.map((transaction) => (
-                <tr key={transaction.id} className="hover:bg-gray-50">
+              {filteredTransactions.map((transaction, index) => (
+                <tr key={transaction.txn_id || index} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {transaction.id}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {transaction.timestamp}
+                      {formatValue(transaction.txn_id)}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs truncate">
-                      {transaction.complaint}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {formatValue(transaction.service)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                      {transaction.errorCode}
+                      {formatValue(transaction.metric)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.gateway}
+                    {formatValue(transaction.value)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.region}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.retryAttempts}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 w-10 h-10">
-                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-xs font-medium text-gray-700">
-                            {transaction.slaScore}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    {formatZScore(transaction.z_score)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                        transaction.fixStatus
+                        transaction.status
                       )}`}
                     >
-                      {getStatusIcon(transaction.fixStatus)}
+                      {getStatusIcon(transaction.status)}
                       <span className="ml-1 capitalize">
-                        {transaction.fixStatus}
+                        {formatValue(transaction.status)}
                       </span>
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatValue(transaction.timestamp)}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link
-                      href={`/transactions/${transaction.id}`}
-                      className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
-                    >
-                      <span>View</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
+                    {transaction.txn_id ? (
+                      <Link
+                        href={`/transactions/${transaction.txn_id}`}
+                        className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
+                      >
+                        <span>View</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
                   </td>
                 </tr>
               ))}
