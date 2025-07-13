@@ -14,7 +14,7 @@ class FailureDetectionAgent:
         query = """
         SELECT *,
                error_count / NULLIF(total_requests, 0) AS error_rate
-        FROM lamx_transactions
+        FROM new_uploaded_data
         WHERE status='fail' AND latency_ms IS NOT NULL
         """
         df = pd.read_sql(query, self.engine)
