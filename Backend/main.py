@@ -263,14 +263,17 @@ async def pattern_detection_endpoint():
 @app.post("/api/rca-reasoning")
 async def rca_reasoning_endpoint(request: Request):
     try:
-        data = await request.json()
-        transactions = data.get("transactions", [])
+        # Try to parse JSON, but handle empty body gracefully
+        try:
+            data = await request.json()
+            transactions = data.get("transactions", [])
+        except Exception:
+            transactions = []
+
         rca_agent = RCAReasoningAgent()
+        rca_agent.run()  # This processes all anomalies needing RCA
 
-        # First run: default run
-        rca_agent.run()
-
-        # Fetch from DB
+        # Fetch RCA results from DB
         engine = get_engine()
         with engine.connect() as conn:
             result = conn.execute(text("""
@@ -292,21 +295,10 @@ async def rca_reasoning_endpoint(request: Request):
             "rca_confidence": float(row[7]) if row[7] else None
         } for row in result]
 
-        # Second pass: run per transaction
-        txn_results = []
-        for txn in transactions:
-            output = rca_agent.run(txn)
-            txn_results.append({
-                "txn_id": txn.get("txn_id"),
-                "summary": output.get("summary"),
-                "confidence": output.get("confidence"),
-            })
-
         return JSONResponse(content={
             "agent": "RCAReasoningAgent",
             "status": "success",
             "data_from_db": rca_results,
-            "results_from_input": txn_results,
             "timestamp": datetime.now().isoformat()
         }, status_code=200)
 
